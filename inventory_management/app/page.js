@@ -24,7 +24,10 @@ import {
 export default function Home() {
   const [inventory, setInventory] = useState([]); // state variable to store inventory
   const [open, setOpen] = useState(false); // add and remove items modal
+  const [nameModalOpen, setNameModalOpen] = useState(false); // modal for changing notepad name
   const [itemName, setItemName] = useState(""); // items name, used to store the items
+  const [notepadName, setNotepadName] = useState("Grocery List"); // notepad name
+  const [newNotepadName, setNewNotepadName] = useState(""); // new notepad name
 
   const updateInventory = async () => {
     // fetch inventory from firebase, "updating from firebase" make async so it wont block code when fetch whitch would cause wesite to freeze
@@ -80,6 +83,14 @@ export default function Home() {
 
   const handleOpen = () => setOpen(true);
   const handleClose = () => setOpen(false);
+  const handleNameModalOpen = () => setNameModalOpen(true);
+  const handleNameModalClose = () => setNameModalOpen(false);
+
+  const handleChangeNotepadName = () => {
+    setNotepadName(newNotepadName);
+    setNewNotepadName("");
+    handleNameModalClose();
+  };
 
   return (
     <Box
@@ -132,6 +143,44 @@ export default function Home() {
           </Stack>
         </Box>
       </Modal>
+
+      <Modal open={nameModalOpen} onClose={handleNameModalClose}>
+        <Box
+          position="absolute"
+          top="50%"
+          left="50%"
+          width={400}
+          bgcolor="white"
+          border="1px solid #ccc"
+          boxShadow={24}
+          p={4}
+          display="flex"
+          flexDirection="column"
+          gap={3}
+          sx={{
+            transform: "translate(-50%, -50%)",
+          }}
+        >
+          <Typography variant="h6">Change Notepad Name</Typography>
+          <Stack width="100%" direction="row" spacing={2}>
+            <TextField
+              variant="outlined"
+              fullWidth
+              value={newNotepadName}
+              onChange={(e) => {
+                setNewNotepadName(e.target.value);
+              }}
+            />
+            <Button
+              variant="contained"
+              onClick={handleChangeNotepadName}
+            >
+              Change
+            </Button>
+          </Stack>
+        </Box>
+      </Modal>
+
       <Button
         variant="contained"
         onClick={handleOpen}
@@ -139,6 +188,15 @@ export default function Home() {
       >
         Add new item
       </Button>
+
+      <Button
+        variant="contained"
+        onClick={handleNameModalOpen}
+        sx={{ mb: 2, bgcolor: "#1976d2", color: "white" }}
+      >
+        Change Notepad Name
+      </Button>
+
       <Paper elevation={3} sx={{ p: 2, width: "80%", maxWidth: 800 }}>
         <Box
           bgcolor="#fffacd"
@@ -147,7 +205,7 @@ export default function Home() {
           borderBottom="1px solid #ccc"
         >
           <Typography variant="h4" color="#333" textAlign="center">
-            Grocery List
+            {notepadName}
           </Typography>
         </Box>
 
@@ -192,3 +250,4 @@ export default function Home() {
     </Box>
   );
 }
+
