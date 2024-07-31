@@ -27,9 +27,10 @@ export default function Home() {
   const [itemName, setItemName] = useState(""); // items name, used to store the items
   const [notepadName, setNotepadName] = useState("Grocery List"); // notepad name
   const [newNotepadName, setNewNotepadName] = useState(""); // new notepad name
+  const [searchTerm, setSearchTerm] = useState(""); // search term
 
   const updateInventory = async () => {
-    // fetch inventory from firebase, "updating from firebase" make async so it wont block code when fetch whitch would cause wesite to freeze
+    // fetch inventory from firebase, "updating from firebase" make async so it wont block code when fetch which would cause website to freeze
     const snapshot = query(collection(firestore, "inventory"));
     const docs = await getDocs(snapshot);
     const inventoryList = [];
@@ -40,7 +41,6 @@ export default function Home() {
       });
     });
     setInventory(inventoryList);
-    // console.log(inventoryList);
   };
 
   const addItem = async (item) => {
@@ -51,8 +51,7 @@ export default function Home() {
       const { quantity } = docSnap.data();
       await setDoc(docRef, { quantity: quantity + 1 }); // if exists then add 1
     } else {
-      // else if dosent set to 1
-      await setDoc(docRef, { quantity: 1 });
+      await setDoc(docRef, { quantity: 1 }); // if doesn't exist, set to 1
     }
 
     await updateInventory(); // update inventory
@@ -65,11 +64,9 @@ export default function Home() {
     if (docSnap.exists()) {
       const { quantity } = docSnap.data();
       if (quantity === 1) {
-        //if = 1 then delete
-        await deleteDoc(docRef);
+        await deleteDoc(docRef); // if quantity is 1, delete
       } else {
-        // else set docRef to quantity to quantity - 1
-        await setDoc(docRef, { quantity: quantity - 1 });
+        await setDoc(docRef, { quantity: quantity - 1 }); // else decrement quantity
       }
     }
 
@@ -90,6 +87,10 @@ export default function Home() {
     setNewNotepadName("");
     handleNameModalClose();
   };
+
+  const filteredInventory = inventory.filter((item) =>
+    item.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <Box
@@ -170,10 +171,7 @@ export default function Home() {
                 setNewNotepadName(e.target.value);
               }}
             />
-            <Button
-              variant="contained"
-              onClick={handleChangeNotepadName}
-            >
+            <Button variant="contained" onClick={handleChangeNotepadName}>
               Change
             </Button>
           </Stack>
@@ -196,6 +194,15 @@ export default function Home() {
         Change Notepad Name
       </Button>
 
+      <TextField
+        variant="outlined"
+        fullWidth
+        placeholder="Search items"
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        sx={{ mb: 2, width: "80%", maxWidth: 800 }}
+      />
+
       <Paper elevation={3} sx={{ p: 2, width: "80%", maxWidth: 800 }}>
         <Box
           bgcolor="#fffacd"
@@ -209,7 +216,7 @@ export default function Home() {
         </Box>
 
         <Stack spacing={2} sx={{ maxHeight: 400, overflowY: "auto", p: 2 }}>
-          {inventory.map(({ name, quantity }) => (
+          {filteredInventory.map(({ name, quantity }) => (
             <Box
               key={name}
               display="flex"
@@ -249,4 +256,5 @@ export default function Home() {
     </Box>
   );
 }
+
 
