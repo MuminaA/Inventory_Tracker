@@ -1,6 +1,7 @@
 "use client"; // makes this a client-side app
 import { useState, useEffect } from "react";
-import { firestore } from "@/firebase";
+import { firestore, auth } from "@/firebase";
+import { GoogleAuthProvider, signOut, onAuthStateChanged } from "firebase/auth";
 import {
   Box,
   Modal,
@@ -20,9 +21,11 @@ import {
   doc,
   getDoc,
   setDoc,
+  where,
 } from "firebase/firestore";
 import EditIcon from "@mui/icons-material/Edit";
 import SearchIcon from "@mui/icons-material/Search";
+import Auth from "./Login";
 
 export default function Home() {
   const [inventory, setInventory] = useState([]); // state variable to store inventory
@@ -31,55 +34,149 @@ export default function Home() {
   const [notepadName, setNotepadName] = useState("Grocery List"); // notepad name
   const [searchTerm, setSearchTerm] = useState(""); // search term
   const [editOpen, setEditOpen] = useState(false); // edit notepad name modal
+  const [user, setUser] = useState(null); // store logged-in user
 
+  // Initialize the Google provider
+  const provider = new GoogleAuthProvider();
+
+  // console.log("Firestore instance:", firestore);
+
+  // Fetch inventory from Firebase
   const updateInventory = async () => {
-    // fetch inventory from firebase, "updating from firebase" make async so it wont block code when fetch which would cause website to freeze
-    const snapshot = query(collection(firestore, "inventory"));
-    const docs = await getDocs(snapshot);
-    const inventoryList = [];
-    docs.forEach((doc) => {
-      inventoryList.push({
-        name: doc.id,
-        ...doc.data(),
-      });
-    });
-    setInventory(inventoryList);
-  };
-
-  const addItem = async (item) => {
-    const docRef = doc(collection(firestore, "inventory"), item);
-    const docSnap = await getDoc(docRef);
-
-    if (docSnap.exists()) {
-      const { quantity } = docSnap.data();
-      await setDoc(docRef, { quantity: quantity + 1 }); // if exists then add 1
-    } else {
-      await setDoc(docRef, { quantity: 1 }); // if doesn't exist, set to 1
+    // console.log("Updating inventory");
+    const user = auth.currentUser;
+    // console.log("Current user:", user);
+    if (!user) {
+      // console.log("No user logged in");
+      return;
     }
 
-    await updateInventory(); // update inventory
+    try {
+      const q = query(
+        collection(firestore, "inventory"),
+        where("userId", "==", user.uid)
+      );
+      // console.log("Query:", q);
+      const querySnapshot = await getDocs(q);
+      // console.log("Number of documents:", querySnapshot.size);
+      const inventoryList = [];
+      querySnapshot.forEach((doc) => {
+        // console.log("Document data:", doc.data());
+        inventoryList.push({
+          name: doc.id.replace("_" + user.uid, ""),
+          ...doc.data(),
+        });
+      });
+      // console.log("Inventory list:", inventoryList);
+      setInventory(inventoryList);
+    } catch (error) {
+      console.error("Error in updateInventory:", error);
+    }
+  };
+
+  // Handle item addition
+  const addItem = async (item) => {
+    //console.log("Adding item:", item);
+    const user = auth.currentUser;
+    // console.log("USER:", user);
+    if (!user) {
+      console.log("No user logged in");
+      return;
+    }
+
+    // console.log("Current user:", user.uid);
+    // console.log("Original item:", item);
+    // console.log("Starting Firestore operation...");
+
+    const docRef = doc(
+      collection(firestore, "inventory"),
+      item + "_" + user.uid
+    );
+
+    //console.log(docRef)
+
+    try {
+      const docSnap = await getDoc(docRef);
+      //console.log("User UID:", user.uid);
+      const newData = {
+        quantity: docSnap.exists() ? docSnap.data().quantity + 1 : 1,
+        userId: user.uid,
+      };
+
+      //console.log("Attempting to write:", newData);
+      //console.log("Document path:", docRef.path);
+
+      await setDoc(docRef, newData, { merge: true });
+      //console.log("Item added successfully");
+    } catch (error) {
+      console.error("Error in addItem:", error);
+      console.error("Error code:", error.code);
+      console.error("Error message:", error.message);
+    }
+
+    await updateInventory();
   };
 
   const removeItem = async (item) => {
-    const docRef = doc(collection(firestore, "inventory"), item);
-    const docSnap = await getDoc(docRef);
-
-    if (docSnap.exists()) {
-      const { quantity } = docSnap.data();
-      if (quantity === 1) {
-        await deleteDoc(docRef); // if quantity is 1, delete
-      } else {
-        await setDoc(docRef, { quantity: quantity - 1 }); // else decrement quantity
-      }
+    const user = auth.currentUser;
+    if (!user) {
+      console.log("No user logged in");
+      return;
     }
 
-    await updateInventory(); // update inventory
+    const docRef = doc(
+      collection(firestore, "inventory"),
+      item + "_" + user.uid
+    );
+
+    try {
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const currentQuantity = docSnap.data().quantity;
+        if (currentQuantity > 1) {
+          // Update the document to decrease quantity
+          const newData = {
+            quantity: currentQuantity - 1,
+            userId: user.uid,
+          };
+          await setDoc(docRef, newData, { merge: true });
+        } else {
+          // Delete the document if quantity is 1 or less
+          await deleteDoc(docRef);
+        }
+
+        // Update local state
+        setInventory((prevInventory) =>
+          prevInventory
+            .map((invItem) =>
+              invItem.name === item
+                ? { ...invItem, quantity: Math.max(0, invItem.quantity - 1) }
+                : invItem
+            )
+            .filter((invItem) => invItem.quantity > 0)
+        );
+      } else {
+        console.log("Document does not exist, nothing to remove");
+      }
+    } catch (error) {
+      console.error("Error in removeItem:", error);
+    }
   };
 
+  // Monitor auth state and update user
   useEffect(() => {
-    updateInventory();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUser(user);
+        updateInventory(); // Fetch inventory after login
+      } else {
+        setUser(null);
+      }
+    });
+    return () => unsubscribe(); // Clean up the subscription
   }, []);
 
+  // Modals for adding/editing items
   const handleOpen = () => setOpen(true);
   const handleClose = () => setOpen(false);
 
@@ -90,6 +187,16 @@ export default function Home() {
     item.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Render login if no user is logged in
+  if (!user) {
+    return <Auth />;
+  }
+
+  const handleLogout = async () => {
+    await signOut(auth);
+  };
+
+  // Render inventory tracker if user is logged in
   return (
     <Box
       width="100vw"
@@ -102,6 +209,7 @@ export default function Home() {
       bgcolor="#f5f5f5"
       padding={2}
     >
+      <button onClick={handleLogout}>Logout</button>
       <Modal open={open} onClose={handleClose}>
         <Box
           position="absolute"
@@ -170,10 +278,7 @@ export default function Home() {
                 setNotepadName(e.target.value);
               }}
             />
-            <Button
-              variant="contained"
-              onClick={handleEditClose}
-            >
+            <Button variant="contained" onClick={handleEditClose}>
               Save
             </Button>
           </Stack>
@@ -203,9 +308,7 @@ export default function Home() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           InputProps={{
-            startAdornment: (
-              <SearchIcon position="start" />
-            ),
+            startAdornment: <SearchIcon position="start" />,
           }}
           sx={{ bgcolor: "white" }}
         />
